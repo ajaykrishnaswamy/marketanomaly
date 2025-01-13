@@ -7,6 +7,10 @@ from sklearn.model_selection import TimeSeriesSplit
 # Load the data
 df = pd.read_csv('FinancialPredictorAnomaly - Sheet1.csv')
 
+# Extract features and target
+y = df['Y']  # Define y here
+X = df[['VIX', 'DXY', 'GT10', 'Cl1', 'CRY', 'BDIY']]  # Define X if needed
+
 # Calculate correlation matrix
 correlation_matrix = df[['Y', 'VIX', 'DXY', 'GT10', 'Cl1', 'CRY', 'BDIY']].corr()
 
@@ -32,4 +36,4 @@ def check_label_distribution(y):
     return distribution
 
 # Add this after loading your data
-check_label_distribution(y)  # Add this before model training 
+check_label_distribution(y)  # Now y is defined 

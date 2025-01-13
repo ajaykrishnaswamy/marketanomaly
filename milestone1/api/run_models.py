@@ -16,9 +16,11 @@ def main():
     # Load and preprocess data
     X, y = preprocessor.load_and_preprocess()
     
-    # Train and evaluate Isolation Forest
-    print("\nTraining Isolation Forest...")
-    (X_train, X_val, X_test), (y_train, y_val, y_test) = preprocessor.split_data(X, y)
+    # Use larger training set for time series
+    print("\nTraining models with 80-10-10 split")
+    (X_train, X_val, X_test), (y_train, y_val, y_test) = preprocessor.split_data(
+        X, y, train_size=0.8, val_size=0.1
+    )
     
     # Check data distribution after splitting
     check_data_distribution(X_train, X_val, X_test, y_train, y_val, y_test)

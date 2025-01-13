@@ -2,20 +2,20 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, f1_score
 import tensorflow as tf
 from sklearn.utils.class_weight import compute_class_weight
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers.legacy import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.metrics import AUC, Precision, Recall
-from sklearn.metrics import f1_score
+from typing import Tuple, Union, List, Dict
 
 class AnomalyDetector:
-    def __init__(self, model_type='iforest'):
+    def __init__(self, model_type: str = 'iforest'):
         self.model_type = model_type
         if model_type == 'iforest':
             self.model = IsolationForest(
-                contamination=0.27,  # Set to match actual anomaly ratio in data
+                contamination=0.2,
                 random_state=42,
                 n_estimators=200,
                 max_samples='auto',
@@ -23,44 +23,46 @@ class AnomalyDetector:
             )
         else:  # LSTM
             self.model = self._build_lstm_model()
-    
-    def _build_lstm_model(self):
+            
+    def _build_lstm_model(self) -> Sequential:
         model = Sequential([
-            LSTM(128, input_shape=(10, 6), return_sequences=True),
+            LSTM(256, input_shape=(10, 6), return_sequences=True),
             BatchNormalization(),
-            Dropout(0.4),  # Increased dropout
+            Dropout(0.3),
             
-            LSTM(64, return_sequences=True),
+            LSTM(128, return_sequences=True),
             BatchNormalization(),
-            Dropout(0.4),
+            Dropout(0.3),
             
-            LSTM(32),
+            LSTM(64, return_sequences=False),
             BatchNormalization(),
-            Dropout(0.4),
+            Dropout(0.3),
             
             Dense(32, activation='relu'),
             BatchNormalization(),
             Dropout(0.3),
             
             Dense(16, activation='relu'),
-            Dropout(0.3),
+            BatchNormalization(),
             
             Dense(1, activation='sigmoid')
         ])
         
-        optimizer = Adam(learning_rate=0.001)
         model.compile(
-            optimizer=optimizer,
+            optimizer=Adam(learning_rate=0.0005),
             loss='binary_crossentropy',
-            metrics=['accuracy', AUC(), Precision(), Recall()]
+            metrics=['accuracy', 
+                    AUC(name='auc'), 
+                    Precision(name='precision'), 
+                    Recall(name='recall')]
         )
         return model
     
-    def fit(self, X_train, y_train, X_val=None, y_val=None):
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray, 
+            X_val: np.ndarray = None, y_val: np.ndarray = None) -> None:
         if self.model_type == 'iforest':
             self.model.fit(X_train)
         else:  # LSTM
-            # Calculate class weights
             class_weights = compute_class_weight(
                 'balanced',
                 classes=np.unique(y_train),
@@ -68,18 +70,18 @@ class AnomalyDetector:
             )
             class_weight_dict = dict(enumerate(class_weights))
             
-            # Add callbacks
             callbacks = [
                 EarlyStopping(
                     monitor='val_loss',
-                    patience=5,
+                    patience=10,
                     restore_best_weights=True,
                     mode='min'
                 ),
                 ReduceLROnPlateau(
                     monitor='val_loss',
-                    factor=0.2,
-                    patience=3,
+                    factor=0.5,
+                    patience=5,
+                    mode='min',
                     min_lr=0.00001
                 )
             ]
@@ -87,16 +89,15 @@ class AnomalyDetector:
             self.model.fit(
                 X_train, y_train,
                 validation_data=(X_val, y_val),
-                epochs=50,  # Reduced epochs
+                epochs=100,
                 batch_size=32,
                 class_weight=class_weight_dict,
                 callbacks=callbacks,
-                shuffle=True
+                shuffle=False  # Important for time series
             )
     
     def predict(self, X):
         if self.model_type == 'iforest':
-            # Convert iforest predictions from {1, -1} to {0, 1}
             return (self.model.predict(X) == -1).astype(int)
         else:  # LSTM
             return (self.model.predict(X) > 0.5).astype(int)
@@ -116,6 +117,10 @@ class AnomalyDetector:
         # Calculate metrics with zero_division parameter
         print("\nClassification Report:")
         print(classification_report(y_test, y_pred, zero_division=0))
+        
+        # Calculate F1 Score manually
+        f1 = f1_score(y_test, y_pred)
+        print(f"F1 Score: {f1:.2f}")
         
         return y_pred
     
