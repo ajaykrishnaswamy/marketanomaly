@@ -23,4 +23,13 @@ total_samples = len(df)
 anomaly_samples = df['Y'].sum()
 print(f"Total samples: {total_samples}")
 print(f"Anomaly samples: {anomaly_samples}")
-print(f"Anomaly percentage: {(anomaly_samples/total_samples)*100:.2f}%") 
+print(f"Anomaly percentage: {(anomaly_samples/total_samples)*100:.2f}%")
+
+def check_label_distribution(y):
+    unique, counts = np.unique(y, return_counts=True)
+    distribution = dict(zip(unique, counts))
+    print("Label distribution:", distribution)
+    return distribution
+
+# Add this after loading your data
+check_label_distribution(y)  # Add this before model training 

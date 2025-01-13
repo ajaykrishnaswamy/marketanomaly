@@ -15,9 +15,11 @@ class AnomalyDetector:
         self.model_type = model_type
         if model_type == 'iforest':
             self.model = IsolationForest(
-                contamination=0.1,  # Adjust based on your anomaly percentage
+                contamination=0.27,  # Set to match actual anomaly ratio in data
                 random_state=42,
-                n_estimators=100
+                n_estimators=200,
+                max_samples='auto',
+                bootstrap=True
             )
         else:  # LSTM
             self.model = self._build_lstm_model()
@@ -26,26 +28,29 @@ class AnomalyDetector:
         model = Sequential([
             LSTM(128, input_shape=(10, 6), return_sequences=True),
             BatchNormalization(),
-            Dropout(0.3),
+            Dropout(0.4),  # Increased dropout
             
             LSTM(64, return_sequences=True),
             BatchNormalization(),
-            Dropout(0.3),
+            Dropout(0.4),
             
             LSTM(32),
             BatchNormalization(),
-            Dropout(0.3),
+            Dropout(0.4),
             
             Dense(32, activation='relu'),
             BatchNormalization(),
+            Dropout(0.3),
             
             Dense(16, activation='relu'),
+            Dropout(0.3),
             
             Dense(1, activation='sigmoid')
         ])
         
+        optimizer = Adam(learning_rate=0.001)
         model.compile(
-            optimizer=Adam(learning_rate=0.001),
+            optimizer=optimizer,
             loss='binary_crossentropy',
             metrics=['accuracy', AUC(), Precision(), Recall()]
         )
@@ -66,15 +71,15 @@ class AnomalyDetector:
             # Add callbacks
             callbacks = [
                 EarlyStopping(
-                    monitor='val_auc',
-                    patience=10,
+                    monitor='val_loss',
+                    patience=5,
                     restore_best_weights=True,
-                    mode='max'
+                    mode='min'
                 ),
                 ReduceLROnPlateau(
                     monitor='val_loss',
-                    factor=0.5,
-                    patience=5,
+                    factor=0.2,
+                    patience=3,
                     min_lr=0.00001
                 )
             ]
@@ -82,10 +87,11 @@ class AnomalyDetector:
             self.model.fit(
                 X_train, y_train,
                 validation_data=(X_val, y_val),
-                epochs=100,
+                epochs=50,  # Reduced epochs
                 batch_size=32,
                 class_weight=class_weight_dict,
-                callbacks=callbacks
+                callbacks=callbacks,
+                shuffle=True
             )
     
     def predict(self, X):
@@ -97,10 +103,21 @@ class AnomalyDetector:
     
     def evaluate(self, X_test, y_test):
         y_pred = self.predict(X_test)
-        print("\nClassification Report:")
-        print(classification_report(y_test, y_pred))
+        
+        # Print detailed metrics
+        print("\nDetailed Metrics:")
+        print("Unique values in predictions:", np.unique(y_pred, return_counts=True))
+        print("Unique values in true labels:", np.unique(y_test, return_counts=True))
+        
+        cm = confusion_matrix(y_test, y_pred)
         print("\nConfusion Matrix:")
-        print(confusion_matrix(y_test, y_pred)) 
+        print(cm)
+        
+        # Calculate metrics with zero_division parameter
+        print("\nClassification Report:")
+        print(classification_report(y_test, y_pred, zero_division=0))
+        
+        return y_pred
     
     def tune_threshold(self, X_val, y_val):
         """Find optimal threshold for anomaly detection"""
@@ -118,3 +135,15 @@ class AnomalyDetector:
                 best_threshold = threshold
                 
         return best_threshold 
+    
+    def evaluate_model(self, y_true, y_pred):
+        print("Unique values in predictions:", np.unique(y_pred, return_counts=True))
+        print("Unique values in true labels:", np.unique(y_true, return_counts=True))
+        
+        # Calculate and print confusion matrix
+        cm = confusion_matrix(y_true, y_pred)
+        print("\nConfusion Matrix:")
+        print(cm)
+        
+        # Then proceed with classification report
+        return classification_report(y_true, y_pred, output_dict=False) 
